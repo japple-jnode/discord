@@ -23,5 +23,8 @@
   "homepage": "https://github.com/japple-jnode/discord#readme",
   "engines": {
     "node": ">=22.4.0"
+  },
+  "dependencies": {
+    "@jnode/request": "1.x.x"
   }
 }
