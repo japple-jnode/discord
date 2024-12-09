@@ -1,0 +1,24 @@
+{
+  "name": "@jnode/discord",
+  "version": "1.0.0",
+  "description": "Simple Discord API package for Node.js.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Hello, Discord.\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/japple-jnode/discord.git"
+  },
+  "keywords": [
+    "JustNode",
+    "Discord",
+    "JustApple"
+  ],
+  "author": "JustApple <apple@justapple.tw>",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/japple-jnode/discord/issues"
+  },
+  "homepage": "https://github.com/japple-jnode/discord#readme"
+}
