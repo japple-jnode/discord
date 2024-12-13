@@ -13,7 +13,6 @@ const request = require('@jnode/request');
 
 //load classes and functions
 const DiscordGateway = require('./gateway.js');
-const error = require('./error.js');
 
 //error types
 //errors from Discord API
