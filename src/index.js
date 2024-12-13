@@ -12,6 +12,6 @@ by JustNode Dev Team / JustApple
 const EventEmitter = require('events');
 
 module.exports = {
-	client: require('./client.js'),
-	gateway: require('./gateway.js')
+	Client: require('./client.js'),
+	Gateway: require('./gateway.js')
 };
