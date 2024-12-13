@@ -28,9 +28,9 @@ class DiscordGateway extends EventEmitter {
 	//get gateway url from api
 	async getGatewayUrl() {
 		const res = await this.client.apiRequest('GET', '/gateway/bot'); //make an api request
-		this.client.gatewayUrl = res.json.url;
-		this.client.gatewayOriginalUrl = res.json.url;
-		return res.json.url;
+		this.client.gatewayUrl = res.json().url;
+		this.client.gatewayOriginalUrl = res.json().url;
+		return res.json().url;
 	}
 	
 	//connect to gateway

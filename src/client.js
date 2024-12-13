@@ -61,12 +61,12 @@ class DiscordClient  {
 		}, (body !== undefined) ? JSON.stringify(body) : undefined); //make an request
 		
 		if ((res.code === 429) && this.apiAutoRetry) { //retry if recieved 429
-			await delay(res.json.retry_after);
+			await delay(res.json().retry_after);
 			return this.apiRequest(method, path, body);
 		}
 		
 		if (((res.code > 299) || (res.code < 200)) && this.apiThrowError) { //throw error if not 2xx
-			throw new DiscordAPIError(res.code, res.json ?? res.body, res.headers);
+			throw new DiscordAPIError(res.code, res.json() ?? res.text(), res.headers);
 		}
 		
 		return res;
@@ -97,12 +97,12 @@ class DiscordClient  {
 		}, request.generateMultipartBody(parts)); //make an request
 		
 		if ((res.code === 429) && this.apiAutoRetry) { //retry if recieved 429
-			await delay(res.json.retry_after);
+			await delay(res.json().retry_after);
 			return this.apiRequest(method, path, body, multipart, true);
 		}
 		
 		if (((res.code > 299) || (res.code < 200)) && this.apiThrowError) { //throw error if not 2xx
-			throw new DiscordAPIError(res.code, res.json ?? res.body, res.headers);
+			throw new DiscordAPIError(res.code, res.json() ?? res.text(), res.headers);
 		}
 		
 		return res;
