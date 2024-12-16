@@ -90,7 +90,7 @@ class DiscordClient  {
 			});
 		}
 		
-		const res = await request(method, this.apiUrl(path), {
+		const res = await request.request(method, this.apiUrl(path), {
 			'Authorization': `Bot ${this.token}`,
 			'User-Agent': 'DiscordBot',
 			'Content-Type': 'multipart/form-data; boundary=----JustDiscordFormBoundary'
