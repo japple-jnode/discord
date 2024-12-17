@@ -93,7 +93,7 @@ class DiscordClient  {
 		const res = await request.request(method, this.apiUrl(path), {
 			'Authorization': `Bot ${this.token}`,
 			'User-Agent': 'DiscordBot',
-			'Content-Type': 'multipart/form-data; boundary=----JustDiscordFormBoundary'
+			'Content-Type': 'multipart/form-data; boundary=----JustRequestFormBoundary'
 		}, request.generateMultipartBody(parts)); //make an request
 		
 		if ((res.code === 429) && this.apiAutoRetry) { //retry if recieved 429
