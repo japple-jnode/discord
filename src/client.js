@@ -76,25 +76,24 @@ class DiscordClient  {
 	async apiRequestMultipart(method = 'GET', path = '/', body, attachments = []) {
 		let parts = [];
 		parts.push({ //json data
-			disposition: 'name="payload_json"',
-			contentType: 'application/json',
+			disposition: 'form-data; name="payload_json"',
+			type: 'application/json',
 			data: JSON.stringify(body)
 		});
 		
 		for (let i = 0; i < attachments.length; i++) { //add every attachment
 			parts.push({
-				disposition: `name="files[${i}]"; filename="${encodeURIComponent(attachments[i].name)}"`,
-				contentType: attachments[i].type,
+				disposition: `form-data; name="files[${i}]"; filename="${encodeURIComponent(attachments[i].name)}"`,
+				type: attachments[i].type,
 				data: attachments[i].data,
-				encoded: attachments[i].encoded
+				base64: attachments[i].encoded
 			});
 		}
 		
-		const res = await request.request(method, this.apiUrl(path), {
+		const res = await request.multipartRequest(method, this.apiUrl(path), {
 			'Authorization': `Bot ${this.token}`,
-			'User-Agent': 'DiscordBot',
-			'Content-Type': 'multipart/form-data; boundary=----JustRequestFormBoundary'
-		}, request.generateMultipartBody(parts)); //make an request
+			'User-Agent': 'DiscordBot'
+		}, parts); //make an request
 		
 		if ((res.code === 429) && this.apiAutoRetry) { //retry if recieved 429
 			await delay(res.json().retry_after);
