@@ -77,7 +77,13 @@ new discord.Client(token, options = {})
     - `method`: HTTP method (e.g. `GET`, `POST`, `PUT`, `DELETE`). Default is `GET`.
     - `path`: API endpoint path. Default is `/`. Example: `/channels/123456789/messages`.
     - `body`: Request body data (will be stringified). Example: `{ content: 'Hello, Discord!' }`.
-    - `attachments`: An array of attachments, each attachment is an object like: `{ name: 'file.png', type: 'image/png', data: Buffer, encoded: base64 or undefined }`.
+    - `attachments`: An array of attachments, each attachment is an object:
+        - `name`: Name of the file. Example: `image.png`
+        - `type` (Optional): Content type of the data. Defaults to `application/octet-stream`.
+        - `data` (Option 1): Data (string or Buffer) of this file.
+        - `file` (Option 2): Path to a local file.
+        - `encoded`/`base64` (Option 3): base64 encoded data string.
+        - `stream` (Option 4): Any readable stream.
     - **Returns**: `Promise<RequestResponse>` - A promise that resolves to a `RequestResponse` object.
     - **Example**:
     ```js

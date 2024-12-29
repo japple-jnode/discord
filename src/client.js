@@ -86,7 +86,9 @@ class DiscordClient  {
 				disposition: `form-data; name="files[${i}]"; filename="${encodeURIComponent(attachments[i].name)}"`,
 				type: attachments[i].type,
 				data: attachments[i].data,
-				base64: attachments[i].encoded
+				base64: attachments[i].encoded ?? attachments[i].base64,
+				stream: attachments[i].stream,
+				file: attachments[i].file
 			});
 		}
 		
