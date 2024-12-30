@@ -112,7 +112,7 @@ class DiscordClient  {
 	async connectGateway(cb) {
 		await this.gateway.getGatewayUrl();
 		this.gateway.connect();
-		cb(this.gateway);
+		if (cb) cb(this.gateway);
 		return this.gateway;
 	}
 }
