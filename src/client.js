@@ -36,7 +36,7 @@ class DiscordClient  {
 		this.apiThrowError = options.apiThrowError ?? true; //throw error while api status code is not 2xx
 		
 		//client gateway options
-		this.gatewayIntents = options.gatewayIntents ?? 0b11111111111111111000110011;
+		this.gatewayIntents = options.gatewayIntents ?? 0b11001100011111111111111111;
 		this.gatewayUrl = options.gatewayUrl ?? 'wss://gateway.discord.gg';
 		this.gatewayOriginalUrl = this.gatewayUrl;
 		this.gatewayReconnectDelay = options.gatewayReconnectDelay ?? 5000; //less than 0 to disable auto reconnect
