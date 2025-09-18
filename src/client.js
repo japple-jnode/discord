@@ -83,7 +83,7 @@ class DiscordClient {
 
 		for (let i = 0; i < attachments.length; i++) { //add every attachment
 			parts.push({
-				disposition: `form-data; name="files[${i}]"; filename=${JSON.stringify(attachments[i].name)}`,
+				disposition: `form-data; name="files[${i}]"; filename="${encodeURIComponent(attachments[i].name)}"`,
 				type: attachments[i].type,
 				data: attachments[i].data,
 				base64: attachments[i].encoded ?? attachments[i].base64,

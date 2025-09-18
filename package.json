@@ -1,6 +1,6 @@
 {
   "name": "@jnode/discord",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "description": "Simple Discord API package for Node.js.",
   "main": "src/index.js",
   "scripts": {
