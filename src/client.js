@@ -25,16 +25,16 @@ class DiscordAPIError extends Error {
 }
 
 //Discord Client, everything starts here
-class DiscordClient  {
+class DiscordClient {
 	constructor(token, options = {}) {
 		this.token = token;
-		
+
 		//client api options
 		this.apiVersion = options.apiVersion ?? 10;
 		this.apiBase = options.apiBase ?? 'discord.com/api';
 		this.apiAutoRetry = options.apiAutoRetry ?? true;
 		this.apiThrowError = options.apiThrowError ?? true; //throw error while api status code is not 2xx
-		
+
 		//client gateway options
 		this.gatewayIntents = options.gatewayIntents ?? 0b11001100011111111111111111;
 		this.gatewayUrl = options.gatewayUrl ?? 'wss://gateway.discord.gg';
@@ -42,16 +42,16 @@ class DiscordClient  {
 		this.gatewayReconnectDelay = options.gatewayReconnectDelay ?? 5000; //less than 0 to disable auto reconnect
 		this.gatewayConnectTimeout = options.gatewayConnectTimeout ?? 5000; //less than 0 to disable connect timeout (may cause error)
 		this.gatewayThrowError = options.gatewayThrowError ?? true; //throw error while gateway went something wrong
-		
+
 		//gateway
 		this.gateway = new DiscordGateway(this);
 	}
-	
+
 	//get full api url with base, version and path
 	apiUrl(path) {
 		return `https://${this.apiBase}/v${this.apiVersion}${path}`;
 	}
-	
+
 	//make an request to Discord
 	async apiRequest(method = 'GET', path = '/', body) {
 		const res = await request.request(method, this.apiUrl(path), {
@@ -59,19 +59,19 @@ class DiscordClient  {
 			'User-Agent': 'DiscordBot',
 			'Content-Type': (body !== undefined) ? 'application/json' : null
 		}, (body !== undefined) ? JSON.stringify(body) : undefined); //make an request
-		
+
 		if ((res.statusCode === 429) && this.apiAutoRetry) { //retry if recieved 429
 			await delay(res.json().retry_after);
 			return this.apiRequest(method, path, body);
 		}
-		
+
 		if (((res.statusCode > 299) || (res.statusCode < 200)) && this.apiThrowError) { //throw error if not 2xx
 			throw new DiscordAPIError(res.statusCode, res.json() ?? res.text(), res.headers);
 		}
-		
+
 		return res;
 	}
-	
+
 	//make an multi part request to Discord
 	async apiRequestMultipart(method = 'GET', path = '/', body, attachments = []) {
 		let parts = [];
@@ -80,10 +80,10 @@ class DiscordClient  {
 			type: 'application/json',
 			data: JSON.stringify(body)
 		});
-		
+
 		for (let i = 0; i < attachments.length; i++) { //add every attachment
 			parts.push({
-				disposition: `form-data; name="files[${i}]"; filename="${encodeURIComponent(attachments[i].name)}"`,
+				disposition: `form-data; name="files[${i}]"; filename=${JSON.stringify(attachments[i].name)}`,
 				type: attachments[i].type,
 				data: attachments[i].data,
 				base64: attachments[i].encoded ?? attachments[i].base64,
@@ -91,24 +91,24 @@ class DiscordClient  {
 				file: attachments[i].file
 			});
 		}
-		
+
 		const res = await request.multipartRequest(method, this.apiUrl(path), {
 			'Authorization': `Bot ${this.token}`,
 			'User-Agent': 'DiscordBot'
 		}, parts); //make an request
-		
+
 		if ((res.statusCode === 429) && this.apiAutoRetry) { //retry if recieved 429
 			await delay(res.json().retry_after);
 			return this.apiRequest(method, path, body, multipart, true);
 		}
-		
+
 		if (((res.statusCode > 299) || (res.statusCode < 200)) && this.apiThrowError) { //throw error if not 2xx
 			throw new DiscordAPIError(res.statusCode, res.json() ?? res.text(), res.headers);
 		}
-		
+
 		return res;
 	}
-	
+
 	async connectGateway(cb) {
 		await this.gateway.getGatewayUrl();
 		this.gateway.connect();
