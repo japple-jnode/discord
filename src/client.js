@@ -99,7 +99,7 @@ class DiscordClient {
 
 		if ((res.statusCode === 429) && this.apiAutoRetry) { //retry if recieved 429
 			await delay(res.json().retry_after);
-			return this.apiRequest(method, path, body, multipart, true);
+			return this.apiRequestMultipart(method, path, body, attachments);
 		}
 
 		if (((res.statusCode > 299) || (res.statusCode < 200)) && this.apiThrowError) { //throw error if not 2xx
