@@ -1,189 +1,165 @@
-# JustDiscord
+# `@jnode/discord`
 
 Simple Discord API package for Node.js.
 
-```shell
-npm install @jnode/discord
+**Note:** This package requires Node.js **v22.4.0** or later to use the built-in `WebSocket` for Discord gateway connections.
+
+## Installation
+
+```
+npm i @jnode/discord
 ```
 
-## Basic Usage
+## Quick start
 
-### Import JustDiscord
+### Import
+
 ```js
-const discord = require('@jnode/discord');
+const { Client, Attachment } = require('@jnode/discord');
 ```
 
-### Create a Client
-```js
-const client = new discord.Client('BOT_TOKEN');
-```
+### Start a simple "Ping-Pong" bot
 
-### Connect to Discord Gateway
 ```js
-client.connectGateway((gateway) => {
-    // receive Discord gateway "READY" event
-    gateway.on('READY', (d) => {
-        console.log('Connected to Discord.');
+const client = new Client('YOUR_BOT_TOKEN');
+
+// Initialize the gateway to receive events
+const gateway = client.gateway({
+  intents: 3276799 // All intents (ensure they are enabled in dev portal)
+});
+
+// Listen for message events
+gateway.on('MESSAGE_CREATE', async (message) => {
+  if (message.content === '!ping') {
+    // Send a reply using the REST client
+    await client.request('POST', `/channels/${message.channel_id}/messages`, {
+      content: 'Pong!'
     });
+  }
 });
 ```
 
-## Class: `Client`
+### Sending files (Attachments)
 
-The main class for interacting with the Discord API and Gateway.
-
-### Constructor
 ```js
-new discord.Client(token, options = {})
+const fs = require('fs');
+
+async function sendImage(channelId) {
+  const fileData = fs.readFileSync('./image.png');
+  const image = new Attachment('image.png', 'image/png', fileData);
+
+  await client.request('POST', `/channels/${channelId}/messages`, 
+    { content: 'Here is your image!' },
+    [image] // Pass attachments as an array
+  );
+}
 ```
-- `token`: Your Discord bot token.
-- `options`: An optional object for setting various client options:
-  - `apiVersion`: The Discord API version. Default is `10`.
-  - `apiBase`: The base URL of the Discord API. Default is `discord.com/api`.
-  - `apiAutoRetry`: Whether to auto-retry requests when receiving a 429 error. Default is `true`.
-  - `apiThrowError`: Whether to throw errors when the API status code is not 2xx. Default is `true`.
-  - `gatewayIntents`: The gateway intents used for connecting to the Gateway. Default is `0b11111111111111111000110011`. You can find more about intents in the [Discord Developer Documentation](https://discord.com/developers/docs/events/gateway).
-  - `gatewayUrl`: The base URL for the Discord Gateway. Default is `wss://gateway.discord.gg`.
-  - `gatewayReconnectDelay`: The delay (in milliseconds) before attempting to reconnect to the gateway. Default is `5000`. Set to less than 0 to disable auto-reconnect.
-  - `gatewayConnectTimeout`: The timeout (in milliseconds) before giving up on connecting to the gateway. Default is `5000`. Set to less than 0 to disable connect timeout.
-  - `gatewayThrowError`: Whether to throw errors when the gateway encounters an issue. Default is `true`.
 
-### Methods
+## How it works?
 
-- `apiUrl(path)`: Returns the full API URL with the base, version, and given path.
-    - `path`: API endpoint path. Example: `/channels/123456789`.
-    - **Returns**: `string` - The full API URL. Example: `https://discord.com/api/v10/channels/123456789`.
+`@jnode/discord` provides a lightweight wrapper around the Discord REST API and WebSocket Gateway.
 
-- `async apiRequest(method = 'GET', path = '/', body)`: Makes an HTTP request to the Discord API, find out more at [Discord Developer Documentation](https://discord.com/developers/docs).
-    - `method`: HTTP method (e.g. `GET`, `POST`, `PUT`, `DELETE`). Default is `GET`.
-    - `path`: API endpoint path. Default is `/`. Example: `/channels/123456789/messages`.
-    - `body`: Request body data (will be stringified). Example: `{ content: 'Hello, Discord!' }`.
-    - **Returns**: `Promise<RequestResponse>` - A promise that resolves to a `RequestResponse` object.
-    - **Example**:
-    ```js
-    client.apiRequest('POST', '/channels/123456789/messages', { content: 'Hello, Discord!' })
-    .then(res => {
-        if (res.statusCode === 200) {
-            console.log('Message sent successfully!');
-        } else {
-            console.error('Failed to send message:', res.statusCode, res.text());
-        }
-    }).catch(err => {
-        console.error('Error sending message:', err);
-    });
-    ```
+1. **REST Client (`Client`)**: Handles all HTTP requests to Discord (messages, channel management, etc.). It includes built-in support for rate-limit auto-retries and multipart/form-data for file uploads.
+2. **Gateway (`Gateway`)**: An `EventEmitter` that maintains a WebSocket connection to Discord. it handles heartbeats, identifies your bot, and emits events when things happen on Discord (like a new message or a member joining).
 
-- `async apiRequestMultipart(method = 'GET', path = '/', body, attachments = [])`: Makes a multipart HTTP request to the Discord API.
-    - `method`: HTTP method (e.g. `GET`, `POST`, `PUT`, `DELETE`). Default is `GET`.
-    - `path`: API endpoint path. Default is `/`. Example: `/channels/123456789/messages`.
-    - `body`: Request body data (will be stringified). Example: `{ content: 'Hello, Discord!' }`.
-    - `attachments`: An array of attachments, each attachment is an object:
-        - `name`: Name of the file. Example: `image.png`
-        - `type` (Optional): Content type of the data. Defaults to `application/octet-stream`.
-        - `data` (Option 1): Data (string or Buffer) of this file.
-        - `file` (Option 2): Path to a local file.
-        - `encoded`/`base64` (Option 3): base64 encoded data string.
-        - `stream` (Option 4): Any readable stream.
-    - **Returns**: `Promise<RequestResponse>` - A promise that resolves to a `RequestResponse` object.
-    - **Example**:
-    ```js
-    const fs = require('fs').promises;
+We keep it simple: no heavy abstractions, just the tools you need to interact with the API directly.
 
-    async function uploadFile(channelId, filePath) {
-        const fileData = await fs.readFile(filePath);
-        const fileType = 'image/png';
-        const fileName = 'my_image.png';
+------
 
-        client.apiRequestMultipart('POST', `/channels/${channelId}/messages`, { content: 'Here\'s an image!' }, [{
-            name: fileName,
-            type: fileType,
-            data: fileData
-        }]).then(res => {
-            if (res.statusCode === 200) {
-                console.log('File uploaded successfully!');
-            } else {
-                console.error('Failed to upload file:', res.statusCode, res.text());
-            }
-        }).catch(err => {
-            console.error('Error uploading file:', err);
-        });
-    }
-    uploadFile('123456789', './my_image.png');
-    ```
+# Reference
 
-- `async connectGateway(cb)`: Connects to the Discord Gateway.
-    - `cb`: A callback function that takes a `gateway` object as an argument.
-    - **Returns**: `Promise<Gateway>` - A promise that resolves to a `Gateway` object.
-    - **Example**:
-    ```js
-    client.connectGateway((gateway) => {
-        gateway.on('READY', (data) => {
-            console.log('Connected to Discord, user id:', data.user.id);
-        });
-        gateway.on('MESSAGE_CREATE', (message) => {
-            if (message.content === '!ping') {
-               console.log('Recieve Ping Message')
-            }
-        });
-    });
-    ```
+## Class: `discord.Client`
 
-## Class: `Gateway`
+The main controller for interacting with the Discord REST API.
 
-Manages the Discord Gateway connection for receiving real-time events. You can find more about gateway events in the [Discord Developer Documentation](https://discord.com/developers/docs/events/gateway).
+### `new discord.Client(token[, options])`
 
-### Events
+- `token` [\<string\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#string_type) Your Discord Bot token.
+- `options` [\<Object\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object)
+  - `baseUrl` [\<string\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#string_type) The API root. **Default:** `'https://discord.com/api/v10'`.
+  - `autoRetry` [\<boolean\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#boolean_type) Whether to automatically wait and retry when hit by a **429** Rate Limit. **Default:** `true`.
 
-- `socketOpened`: Emitted when the WebSocket connection is opened.
-  - `event`: A WebSocket event object.
-- `socketClosed`: Emitted when the WebSocket connection is closed.
-  - `event`: A WebSocket event object.
-- `socketError`: Emitted when a WebSocket error occurs.
-  - `event`: A WebSocket event object.
-- `socketMessage`: Emitted when a raw WebSocket message is received.
-    - `event`: A WebSocket event object.
-- `message`: Emitted when a complete JSON payload is received.
-    - `data`: A JSON object.
-- Discord Gateway Event (`READY`, `MESSAGE_CREATE`... etc.): The gateway will auto dispatch discord events. Check [Discord Developer Documentation](https://discord.com/developers/docs/events/gateway-events) for all avaliable events. The event callback will be a data object from discord.
+### `client.request(method, path[, body, attachments, options])`
 
-### Methods
+- `method` [\<string\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#string_type) HTTP method (e.g., `'GET'`, `'POST'`, `'PATCH'`). **Default:** `'GET'`.
+- `path` [\<string\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#string_type) The API endpoint path (e.g., `'/channels/123/messages'`).
+- `body` [\<Object\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object) The JSON payload to send.
+- `attachments` [\<discord.Attachment[]\>](#class-discordattachment) An array of attachment objects for file uploads.
+- `options` [\<Object\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object)
+  - `auditLog` [\<string\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#string_type) Reason to be displayed in the Discord Audit Log.
+  - `headers` [\<Object\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object) Additional HTTP headers.
+  - `requestOptions` [\<Object\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object) Options passed to the underlying `@jnode/request`.
+- Returns: [\<Promise\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) Fulfills with the parsed JSON response, or `null` if status is **204**.
 
-- `async getGatewayUrl()`: Retrieves the gateway URL from the Discord API.
-    - **Returns**: `Promise<string>` - A promise that resolves to the gateway URL.
+### `client.gateway([options])`
 
-- `connect()`: Opens the WebSocket connection to the Discord Gateway.
+- `options` [\<Object\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object) Options for the gateway (see [`discord.Gateway`](#class-discordgateway)).
+- Returns: [\<discord.Gateway\>](#class-discordgateway) A new gateway instance.
 
-- `sendMessage(op, d = null)`: Sends a message to the Discord Gateway.
-    - `op`: Opcode of the message. Check [Discord Developer Documentation](https://discord.com/developers/docs/events/gateway-events) for all avaliable opcodes.
-    - `d`: Payload of the message.
-     - **Example**:
-    ```js
-    gateway.sendMessage(1, {}); //send heartbeat
-    gateway.sendMessage(2, { //Identify
-        token: 'BOT_TOKEN',
-        properties: {
-            os: process.platform,
-            browser: 'Node.js',
-            device: 'JustDiscord'
-        },
-        intents: 0b11111111111111111000110011 //replace with your intents
-    });
-    ```
+## Class: `discord.Gateway`
 
-## Class: `DiscordAPIError`
+- Extends: [\<EventEmitter\>](https://nodejs.org/docs/latest/api/events.html#class-eventemitter)
 
-An error that is thrown when the Discord API returns a non-2xx status code.
+Handles the WebSocket connection to receive real-time events.
 
-### Properties
+### `new discord.Gateway(client[, options])`
 
-- `message`: The error message.
-- `body`: The response body.
-- `headers`: The response headers.
+- `client` [\<discord.Client\>](#class-discordclient) An instance of the Discord client.
+- `options` [\<Object\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object)
+  - `intents` [\<number\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#number_type) Gateway intents bitmask. **Default:** `3276799` (All non-privileged).
+  - `reconnectDelay` [\<number\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#number_type) Delay (ms) before reconnecting after a close. **Default:** `5000`.
+  - `connectTimeout` [\<number\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#number_type) Timeout (ms) for the initial connection. **Default:** `5000`.
+  - `apiVersion` [\<number\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#number_type) Discord Gateway version. **Default:** `10`.
+  - `heartbeatJitter` [\<number\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#number_type) Coefficient for heartbeat interval jitter. **Default:** `0.9`.
+  - `heartbeatAckTimeout` [\<number\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#number_type) Timeout (ms) to wait for a heartbeat ACK before closing. **Default:** `3000`.
+  - `presence` [\<Object\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object) Initial presence information.
+  - `shard` [\<number[]\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array) Array of two integers `[shard_id, num_shards]`.
 
-## Helper functions
+### `gateway.send(op[, d])`
 
-- `RequestResponse` class with properties like:
-    - `statusCode`: Status code.
-    - `headers`: Response headers.
-    - `text(encoding)`: Return response body in string, with optional encoding. Example: `res.text('utf-8')`.
-    - `json()`: Return response body in JSON format, or `undefined` when cannot parse JSON. Example: `res.json()`.
+- `op` [\<number\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#number_type) Gateway Opcode.
+- `d` [\<any\>] Data payload.
+
+Sends a raw event through the gateway.
+
+### `gateway.close()`
+
+Closes the WebSocket connection.
+
+### Event: `'socketOpen'`
+
+Emitted when the WebSocket connection is established.
+
+### Event: `'socketClose'`
+
+- `event` [\<CloseEvent\>]
+
+Emitted when the WebSocket connection is closed.
+
+### Event: `'message'`
+
+- `data` [\<Object\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object)
+
+Emitted for every raw message received from the gateway.
+
+### Event: `<DISPATCH_EVENT_NAME>`
+
+- `data` [\<Object\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object)
+
+Emitted when a specific Discord Dispatch event is received (Opcode 0). E.G., `'READY'`, `'MESSAGE_CREATE'`, `'GUILD_CREATE'`.
+
+### Event: `'error'`
+
+- `err` [\<Error\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error)
+
+Emitted when a critical gateway error occurs (e.g., invalid token).
+
+## Class: `discord.Attachment`
+
+Represents a file to be uploaded.
+
+### `new discord.Attachment(filename, type, body)`
+
+- `filename` [\<string\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#string_type) The name of the file (e.g., `'photo.jpg'`).
+- `type` [\<string\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#string_type) The MIME type (e.g., `'image/jpeg'`).
+- `body` [\<Buffer\>](https://nodejs.org/docs/latest/api/buffer.html#class-buffer) | [\<string\>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#string_type) The actual file content.

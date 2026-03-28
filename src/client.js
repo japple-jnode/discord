@@ -1,125 +1,85 @@
 /*
-JustDiscord/client.js
-v.1.0.0
+@jnode/discord/client.js
+v2
 
 Simple Discord API package for Node.js.
 Must use Node.js v22.4.0 or later for WebSocket (Discord gateway).
 
-by JustNode Dev Team / JustApple
+by JustApple
 */
 
-//load jnode packages
-const request = require('@jnode/request');
-
-//load classes and functions
+// dependencies
+const { request, FormPart } = require('@jnode/request');
 const DiscordGateway = require('./gateway.js');
 
-//error types
-//errors from Discord API
+// errors from Discord API
 class DiscordAPIError extends Error {
-	constructor(code, body, headers) {
-		super(`Discord API respond with code ${code}.`);
-		this.body = body;
-		this.headers = headers;
+	constructor(res) {
+		super(`Discord API respond with code ${res.statusCode}.`);
+		this.res = res;
 	}
 }
 
-//Discord Client, everything starts here
+// Discord client
 class DiscordClient {
 	constructor(token, options = {}) {
 		this.token = token;
 
-		//client api options
-		this.apiVersion = options.apiVersion ?? 10;
-		this.apiBase = options.apiBase ?? 'discord.com/api';
-		this.apiAutoRetry = options.apiAutoRetry ?? true;
-		this.apiThrowError = options.apiThrowError ?? true; //throw error while api status code is not 2xx
-
-		//client gateway options
-		this.gatewayIntents = options.gatewayIntents ?? 0b11001100011111111111111111;
-		this.gatewayUrl = options.gatewayUrl ?? 'wss://gateway.discord.gg';
-		this.gatewayOriginalUrl = this.gatewayUrl;
-		this.gatewayReconnectDelay = options.gatewayReconnectDelay ?? 5000; //less than 0 to disable auto reconnect
-		this.gatewayConnectTimeout = options.gatewayConnectTimeout ?? 5000; //less than 0 to disable connect timeout (may cause error)
-		this.gatewayThrowError = options.gatewayThrowError ?? true; //throw error while gateway went something wrong
-
-		//gateway
-		this.gateway = new DiscordGateway(this);
+		// client api options
+		this.baseUrl = options.baseUrl ?? 'https://discord.com/api/v10';
+		this.autoRetry = options.autoRetry ?? true;
 	}
 
-	//get full api url with base, version and path
-	apiUrl(path) {
-		return `https://${this.apiBase}/v${this.apiVersion}${path}`;
-	}
+	// make request
+	async request(method = 'GET', path = '/', body, attachments = [], options = {}) {
+		// generate body
+		let reqBody;
+		if (!attachments?.length) {
+			reqBody = JSON.stringify(body);
+		} else {
+			reqBody = [new FormPart('payload_json', JSON.stringify(body), { 'Content-Type': 'application/json' })];
 
-	//make an request to Discord
-	async apiRequest(method = 'GET', path = '/', body) {
-		const res = await request.request(method, this.apiUrl(path), {
+			// add every attachment
+			for (let i in attachments) {
+				attachments[i].name = attachments[i].name ?? `files[${i}]`;
+				reqBody.push(attachments[i]);
+			}
+		}
+
+		// make request
+		const res = await request(method, this.baseUrl + path, reqBody, {
 			'Authorization': `Bot ${this.token}`,
 			'User-Agent': 'DiscordBot',
-			'Content-Type': (body !== undefined) ? 'application/json' : null
-		}, (body !== undefined) ? JSON.stringify(body) : undefined); //make an request
+			'Content-Type': (body !== undefined) ? 'application/json' : null,
+			'X-Audit-Log-Reason': options.auditLog ? encodeURIComponent(options.auditLog) : null,
+			...options.headers
+		}, options.requestOptions);
 
-		if ((res.statusCode === 429) && this.apiAutoRetry) { //retry if recieved 429
-			await delay(res.json().retry_after);
-			return this.apiRequest(method, path, body);
+		// retry if recieved 429
+		if ((res.statusCode === 429) && this.autoRetry) {
+			await delay((await res.json()).retry_after * 1000);
+			return this.request(method, path, body, attachments, options);
 		}
 
-		if (((res.statusCode > 299) || (res.statusCode < 200)) && this.apiThrowError) { //throw error if not 2xx
-			throw new DiscordAPIError(res.statusCode, res.json() ?? res.text(), res.headers);
-		}
+		// throw error if not 2xx
+		if ((res.statusCode > 299) || (res.statusCode < 200)) throw new DiscordAPIError(res);
 
-		return res;
+		try {
+			return (res.statusCode === 204) ? null : await res.json();
+		} catch {
+			return await res.text();
+		}
 	}
 
-	//make an multi part request to Discord
-	async apiRequestMultipart(method = 'GET', path = '/', body, attachments = []) {
-		let parts = [];
-		parts.push({ //json data
-			disposition: 'form-data; name="payload_json"',
-			type: 'application/json',
-			data: JSON.stringify(body)
-		});
-
-		for (let i = 0; i < attachments.length; i++) { //add every attachment
-			parts.push({
-				disposition: `form-data; name="files[${i}]"; filename="${encodeURIComponent(attachments[i].name)}"`,
-				type: attachments[i].type,
-				data: attachments[i].data,
-				base64: attachments[i].encoded ?? attachments[i].base64,
-				stream: attachments[i].stream,
-				file: attachments[i].file
-			});
-		}
-
-		const res = await request.multipartRequest(method, this.apiUrl(path), {
-			'Authorization': `Bot ${this.token}`,
-			'User-Agent': 'DiscordBot'
-		}, parts); //make an request
-
-		if ((res.statusCode === 429) && this.apiAutoRetry) { //retry if recieved 429
-			await delay(res.json().retry_after);
-			return this.apiRequestMultipart(method, path, body, attachments);
-		}
-
-		if (((res.statusCode > 299) || (res.statusCode < 200)) && this.apiThrowError) { //throw error if not 2xx
-			throw new DiscordAPIError(res.statusCode, res.json() ?? res.text(), res.headers);
-		}
-
-		return res;
-	}
-
-	async connectGateway(cb) {
-		await this.gateway.getGatewayUrl();
-		this.gateway.connect();
-		if (cb) cb(this.gateway);
-		return this.gateway;
+	gateway(options) {
+		return new DiscordGateway(this, options);
 	}
 }
 
-//wait time (ms)
+// wait time (ms)
 function delay(ms) {
 	return new Promise((resolve, reject) => { setTimeout(resolve, ms); });
 }
 
+// export
 module.exports = DiscordClient;

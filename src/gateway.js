@@ -1,6 +1,6 @@
 /*
-JustDiscord/gateway.js
-v.1.0.0
+@jnode/discord/gateway.js
+v2
 
 Simple Discord API package for Node.js.
 Must use Node.js v22.4.0 or later for WebSocket (Discord gateway).
@@ -8,144 +8,184 @@ Must use Node.js v22.4.0 or later for WebSocket (Discord gateway).
 by JustNode Dev Team / JustApple
 */
 
-//load classes and functions
-//errors from Discord Gateway
-class DiscordGatewayError extends Error { constructor(...i) { super(...i); } }
-
-//load node packages
+// dependencies
 const EventEmitter = require('events');
 
-//Discord Gateway, recieve live messages with WebSocket
+// Discord gateway, recieve live events with WebSocket
 class DiscordGateway extends EventEmitter {
-	constructor(client) {
+	constructor(client, options = {}) {
 		super();
-		
+
 		this.client = client;
-		this.socket = {};
-		this.s = null;
+
+		// gateway options
+		this.intents = options.intents ?? 0b11001100011111111111111111;
+		this.reconnectDelay = options.reconnectDelay ?? 5000;
+		this.connectTimeout = options.connectTimeout ?? 5000;
+		this.apiVersion = options.apiVersion ?? 10;
+		this.heartbeatJitter = options.heartbeatJitter ?? 0.9;
+		this.heartbeatAckTimeout = options.heartbeatAckTimeout ?? 3000;
+		this.shard = options.shard;
+		this.largeThreshold = options.largeThreshold;
+		this.presence = options.presence;
+
+		this._s = null;
+
+		// connect anyways
+		this.connect();
 	}
-	
-	//get gateway url from api
-	async getGatewayUrl() {
-		const res = await this.client.apiRequest('GET', '/gateway/bot'); //make an api request
-		this.client.gatewayUrl = res.json().url;
-		this.client.gatewayOriginalUrl = res.json().url;
-		return res.json().url;
-	}
-	
-	//connect to gateway
-	connect() {
-		if ((this.socket.readyState !== 3) && this.socket.close) this.socket.close(); //close privous connect
-		
-		this.socket = new WebSocket(`${this.client.gatewayUrl}?v=${this.client.apiVersion}&encoding=json`); //connect
-		
-		if (this.client.gatewayConnectTimeout !== 0) { //set connect timeout
-			this.connectTimeout = setTimeout(() => {
-				this.socket.close(); //close socket
+
+	// connect to gateway
+	async connect() {
+		// get gateway url
+		const gatewayUrl = this._resumeUrl ?? this.client._gatewayUrl ?? (this.client._gatewayUrl = (await this.client.request('GET', '/gateway/bot')).url);
+
+		// create connection
+		this.socket = new WebSocket(`${gatewayUrl}?v=${this.apiVersion}&encoding=json`);
+
+		// connect timeout
+		if (this.connectTimeout > 0) {
+			clearTimeout(this._connectTimeout);
+			this._connectTimeout = setTimeout(() => {
+				this.socket.close();
 				this.emit('timeout');
-				
-				if (this.client.gatewayReconnectDelay >= 0) { //if auto reconnect is allowed
-					setTimeout(() => {
-						this.connect();
-					}, this.client.gatewayReconnectDelay); //reconnect after specific time
-				}
-			}, this.client.gatewayConnectTimeout);
+			}, this.connectTimeout);
 		}
-		
-		this.socket.addEventListener('open', (event) => { //socket opened
-			this.emit('socketOpened', event); //send event with socket event
-			clearTimeout(this.connectTimeout); //clear timeout if successfully connected
+
+		// socket open
+		this.socket.addEventListener('open', (event) => {
+			this.emit('socketOpen', event);
 		});
-		
-		this.socket.addEventListener('close', (event) => { //socket closed
-			this.emit('socketClosed', event); //send event with event (may have close code and reason)
-			clearInterval(this.heartbeatInterval); //clear heatbeat interval
-			
-			
-			if (this.client.gatewayReconnectDelay >= 0) { //if auto reconnect is allowed
+
+		// socket close
+		this.socket.addEventListener('close', (event) => {
+			this.emit('socketClose', event);
+			clearTimeout(this._connectTimeout);
+			clearInterval(this._heartbeatInterval);
+
+			// error close
+			if ([4004, 4010, 4011, 4012, 4013, 4014].includes(event.code)) {
+				const err = new Error(event.reason);
+				err.code = event.code;
+				this.emit('error', err);
+				return;
+			}
+
+			// reconnect
+			if (this.reconnectDelay >= 0) {
 				setTimeout(() => {
 					this.connect();
-				}, this.client.gatewayReconnectDelay); //reconnect after specific time
+				}, this.reconnectDelay);
 			}
 		});
-		
-		this.socket.addEventListener('error', (event) => { //socket error
-			this.emit('socketError', event); //send event with event (may have error info)
+
+		// error
+		this.socket.addEventListener('error', (event) => {
+			this.emit('socketError', event);
 		});
-		
-		this.socket.addEventListener('message', (event) => { //recieve gateway message
-			try {
-				this.emit('socketMessage', event); //send event with event (may have data and more)
-				
-				const data = JSON.parse(event.data); //parse json data
-				this.emit('message', data); //send event with json data
-				
-				//auto handle by op
-				switch (data.op) {
-					case 0: //Dispatch
-						this.emit(data.t, data.d); //send t event with d
-						this.s = data.s ?? this.s; //save s number there is
-						
-						//auto handle by t
-						switch (data.t) {
-							case 'READY': //save resume data
-								this.sessionId = data.d['session_id'];
-								this.client.gatewayUrl = data.d['resume_gateway_url'];
-								break;
-							default:
-								break;
-						}
-						break;
-					case 7: //Reconnect, need to reconnect
-						this.socket.close(); //close socket
-						break;
-					case 9: //Invalid Session, need to reconnect
-						this.client.gatewayUrl = this.client.gatewayOriginalUrl; //reset url
-						this.sessionId = undefined; //reset session id
-						this.socket.close(); //close socket
-						break;
-					case 10: //Hello
-						this.heartbeatIntervalMS = data.d['heartbeat_interval'] * 0.9; //save heart beat interval time
-						this.sendMessage(1); //send first heartbeat
-						
-						clearInterval(this.heartbeatInterval); //clear old interval
-						this.heartbeatInterval = setInterval(() => { //start heartbeat interval
-							this.sendMessage(1);
-						}, this.heartbeatIntervalMS);
-						
-						if (this.sessionId) { //may be resumed
-							this.sendMessage(6, { //Resume
-								token: this.client.token,
-								session_id: this.sessionId,
-								seq: this.s
-							});
-						} else { //start new session
-							this.sendMessage(2, { //Identify
-								token: this.client.token,
-								properties: {
-									os: process.platform,
-									browser: 'Node.js',
-									device: 'JustDiscord'
-								},
-								intents: this.client.gatewayIntents
-							});
-						}
-						break;
-					default:
-						break;
-				}
-			} catch (err) {
-				if (this.client.gatewayThrowError) { //throw gateway error
-					err.name = 'DiscordGatewayError'; //change the name of the error
-					throw err;
-				}
+
+		// message
+		this.socket.addEventListener('message', (event) => {
+			this.emit('socketMessage', event);
+
+			const data = JSON.parse(event.data);
+			this.emit('message', data);
+
+			// handle by op
+			switch (data.op) {
+				case 0: // dispatch
+					this.emit(data.t, data.d);
+					this._s = data.s ?? this._s;
+
+					// ready event
+					if (data.t === 'READY') {
+						this._sessionId = data.d.session_id;
+						this._resumeUrl = data.d.resume_gateway_url;
+					}
+					break;
+				case 7: // reconnect
+					this.socket.close();
+
+					break;
+				case 9: // invaild session
+					if (!data.d) { // start new connection
+						this._resumeUrl = null;
+						this._sessionId = null;
+						this._s = null;
+					}
+					this.socket.close();
+					break;
+				case 10: // hello
+					clearTimeout(this._connectTimeout);
+
+					this.heartbeat();
+
+					// start heatbeat interval
+					clearInterval(this._heartbeatInterval);
+					this._heartbeatInterval = setInterval(() => {
+						this.heartbeat();
+					}, data.d.heartbeat_interval * this.heartbeatJitter);
+
+					// start identify or resume
+					if (this._sessionId && this._resumeUrl) { // resume
+						this.send(6, {
+							token: this.client.token,
+							session_id: this._sessionId,
+							seq: this._s
+						});
+					} else { // identify
+						this.send(2, {
+							token: this.client.token,
+							intents: this.intents,
+							properties: {
+								os: process.platform,
+								browser: 'jnode_discord',
+								device: 'jnode_discord'
+							},
+							presence: this.presence,
+							shard: this.shard,
+							large_threshold: this.largeThreshold
+						});
+					}
+
+					break;
+				case 11: // heartbeat ack
+					this.emit('heartbeatAck');
+					break;
 			}
 		});
 	}
-	
-	sendMessage(op, d = null) {
+
+	heartbeat() {
+		this.send(1, this._s);
+
+		// could not receive heartbeat ack
+		const timeout = setTimeout(() => {
+			this.emit('heartbeatTimeout');
+			this.socket.close();
+		}, this.heartbeatAckTimeout);
+
+		// received ack
+		this.once('heartbeatAck', () => {
+			clearTimeout(timeout);
+		});
+
+		// close
+		this.once('close', () => {
+			clearTimeout(timeout);
+		});
+	}
+
+	// sends a gateway event
+	send(op, d = null) {
 		this.socket.send(JSON.stringify({ op, d }));
+	}
+
+	// closes the gateway
+	close() {
+		this.socket.close();
 	}
 }
 
+// export
 module.exports = DiscordGateway;
