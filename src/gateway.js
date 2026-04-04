@@ -62,6 +62,7 @@ class DiscordGateway extends EventEmitter {
 			this.emit('socketClose', event);
 			clearTimeout(this._connectTimeout);
 			clearInterval(this._heartbeatInterval);
+			clearTimeout(this._heartbeatTimeout);
 
 			// error close
 			if ([4004, 4010, 4011, 4012, 4013, 4014].includes(event.code)) {
@@ -150,7 +151,7 @@ class DiscordGateway extends EventEmitter {
 
 					break;
 				case 11: // heartbeat ack
-					this.emit('heartbeatAck');
+					clearTimeout(this._heartbeatTimeout);
 					break;
 			}
 		});
@@ -160,20 +161,11 @@ class DiscordGateway extends EventEmitter {
 		this.send(1, this._s);
 
 		// could not receive heartbeat ack
-		const timeout = setTimeout(() => {
+		clearTimeout(this._heartbeatTimeout);
+		this._heartbeatTimeout = setTimeout(() => {
 			this.emit('heartbeatTimeout');
 			this.socket.close();
 		}, this.heartbeatAckTimeout);
-
-		// received ack
-		this.once('heartbeatAck', () => {
-			clearTimeout(timeout);
-		});
-
-		// close
-		this.once('close', () => {
-			clearTimeout(timeout);
-		});
 	}
 
 	// sends a gateway event
